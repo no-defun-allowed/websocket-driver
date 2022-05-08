@@ -34,6 +34,8 @@
         :accessor url)
    (key :initform (generate-key)
         :reader key)
+   (close-lock :initform (bt:make-lock "Closing SSL stream lock")
+               :reader close-lock)
    (accept :accessor accept)
    (version :initform "hybi-13")
    (require-masking :initarg :require-masking
@@ -265,12 +267,13 @@
       (funcall callback))))
 
 (defmethod close-connection ((client client) &optional reason code)
-  (ignore-errors (close (socket client)))
-  (setf (ready-state client) :closed)
-  (let ((thread (read-thread client)))
-    (when thread
-      (unless (eq (bt:current-thread) thread)
-        (bt:destroy-thread thread))
-      (setf (read-thread client) nil)))
+  (bt:with-lock-held ((close-lock client))
+    (ignore-errors (close (socket client)))
+    (setf (ready-state client) :closed)
+    (let ((thread (read-thread client)))
+      (when thread
+        (unless (eq (bt:current-thread) thread)
+          (bt:destroy-thread thread))
+        (setf (read-thread client) nil))))
   (emit :close client :code code :reason reason)
   t)

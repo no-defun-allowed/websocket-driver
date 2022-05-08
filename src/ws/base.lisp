@@ -204,12 +204,16 @@
 
 (defun read-websocket-frame (stream)
   (let ((buf (make-array 2 :element-type '(unsigned-byte 8)))
-        (extended-buf (make-array 8 :element-type '(unsigned-byte 8))))
+        (extended-buf (make-array 8 :element-type '(unsigned-byte 8)))
+        (retries 10))
     (block nil
       (tagbody retry
          (let ((read-bytes (handler-case (read-sequence buf stream)
                              (error ()
+                               (when (zerop retries)
+                                 (return nil)) ; fuck it, tried enough times
                                ;; Retry when I/O timeout error
+                               (decf retries)
                                (go retry)))))
            (when (= read-bytes 0)
              (return nil))
