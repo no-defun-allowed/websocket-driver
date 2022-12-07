@@ -268,7 +268,7 @@
 
 (defmethod close-connection ((client client) &optional reason code)
   (bt:with-lock-held ((close-lock client))
-    (ignore-errors (close (socket client)))
+    (ignore-errors (close (socket client) :abort t))
     (setf (ready-state client) :closed)
     (let ((thread (read-thread client)))
       (when thread
