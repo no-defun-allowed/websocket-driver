@@ -36,6 +36,7 @@
         :reader key)
    (close-lock :initform (bt:make-lock "Closing SSL stream lock")
                :reader close-lock)
+   (usocket :accessor usocket)
    (accept :accessor accept)
    (version :initform "hybi-13")
    (require-masking :initarg :require-masking
@@ -156,9 +157,9 @@
                                                         (find protocol (accept-protocols client) :test #'string=))
                                              (fail-handshake "Sec-WebSocket-Protocol mismatch"))
                                            (setf (protocol client) protocol))))))
-           (stream (usocket:socket-stream
-                    (usocket:socket-connect (uri-host uri) (uri-port uri)
-                                            :element-type '(unsigned-byte 8))))
+           (usocket (usocket:socket-connect (uri-host uri) (uri-port uri)
+                                            :element-type '(unsigned-byte 8)))
+           (stream (usocket:socket-stream usocket))
            (stream (if secure
                        #+websocket-driver-no-ssl
                        (error "SSL not supported. Remove :websocket-driver-no-ssl from *features* to enable SSL.")
@@ -179,7 +180,8 @@
                                                             :verify (if verify :optional nil)))))
                        stream)))
 
-      (setf (socket client) stream)
+      (setf (socket client) stream
+            (usocket client) usocket)
       (send-handshake-request client)
       (funcall http-parser (read-until-crlf*2 stream))
       (open-connection client)
@@ -269,6 +271,7 @@
 (defmethod close-connection ((client client) &optional reason code)
   (bt:with-lock-held ((close-lock client))
     (ignore-errors (close (socket client) :abort t))
+    (ignore-errors (usocket:socket-close (usocket client)))
     (setf (ready-state client) :closed)
     (let ((thread (read-thread client)))
       (when thread
